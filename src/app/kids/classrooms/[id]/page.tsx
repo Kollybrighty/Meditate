@@ -8,6 +8,7 @@ import ShareInvite from "@/components/group/ShareInvite";
 import StartLessonForm from "@/components/kids/StartLessonForm";
 import MaterialUpload from "@/components/kids/MaterialUpload";
 import TeacherLobbyPanel from "@/components/kids/TeacherLobbyPanel";
+import DeleteClassroomButton from "@/components/kids/DeleteClassroomButton";
 
 function appBaseUrl() {
   const raw =
@@ -182,6 +183,17 @@ export default async function ClassroomPage({
           ) : (
             <p className="mt-2 text-sm text-stone-500">No lessons yet.</p>
           )}
+        </section>
+
+        <section className="rounded-xl border border-red-200 bg-white p-6">
+          <h2 className="font-semibold text-red-900">Delete classroom</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Permanently remove this class and its sessions. Enrolled families will no longer see
+            it under Join a class.
+          </p>
+          <div className="mt-4">
+            <DeleteClassroomButton classroomId={id} classroomName={classroom.name} />
+          </div>
         </section>
 
         <div className="flex flex-wrap gap-3">

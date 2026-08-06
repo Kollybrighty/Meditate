@@ -50,3 +50,38 @@ export async function startKidsLesson(
   revalidatePath(`/kids/classrooms/${classroomId}`);
   redirect(`/kids/classrooms/${classroomId}/lesson/${lesson.id}`);
 }
+
+export async function deleteClassroom(
+  _prev: ClassroomActionState,
+  formData: FormData
+): Promise<ClassroomActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const classroomId = formData.get("classroomId") as string;
+  if (!classroomId) return { error: "Classroom is required." };
+
+  const { data: classroom } = await supabase
+    .from("classrooms")
+    .select("id, host_id, name")
+    .eq("id", classroomId)
+    .maybeSingle();
+
+  if (!classroom) return { error: "Classroom not found." };
+  if (classroom.host_id !== user.id) {
+    return { error: "Only the classroom host can delete this class." };
+  }
+
+  const { error } = await supabase.from("classrooms").delete().eq("id", classroomId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/kids/host");
+  revalidatePath("/kids");
+  revalidatePath("/kids/join");
+  revalidatePath("/kids/children");
+  redirect("/kids/host");
+}
