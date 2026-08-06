@@ -15,8 +15,8 @@ export default function NewClassroomPage() {
   return (
     <div className="min-h-screen bg-sky-50 px-4 py-10">
       <div className="mx-auto max-w-lg">
-        <Link href="/kids" className="mb-6 inline-flex items-center gap-2 text-sm text-sky-700 hover:underline">
-          ← Kids home
+        <Link href="/kids/host" className="mb-6 inline-flex items-center gap-2 text-sm text-sky-700 hover:underline">
+          ← Your classrooms
         </Link>
         <div className="mb-6 flex items-center gap-3">
           <Baby className="h-10 w-10 text-sky-500" />

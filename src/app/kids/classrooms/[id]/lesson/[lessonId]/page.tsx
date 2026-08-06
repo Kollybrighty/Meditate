@@ -8,7 +8,6 @@ import CharacterPicker from "@/components/kids/CharacterPicker";
 import ContributionBoard from "@/components/kids/ContributionBoard";
 import NextToQuizButton from "@/components/kids/NextToQuizButton";
 import TeacherLobbyPanel from "@/components/kids/TeacherLobbyPanel";
-import ParentJoinSession from "@/components/kids/ParentJoinSession";
 
 type LobbyEntry = {
   id: string;
@@ -54,7 +53,7 @@ export default async function LessonSessionPage({
 
   const { data: myChildren } = await supabase
     .from("child_profiles")
-    .select("id, display_name")
+    .select("id")
     .eq("parent_user_id", user.id);
 
   const enrolledChildIds: string[] = [];
@@ -71,9 +70,6 @@ export default async function LessonSessionPage({
       enrolledChildIds.push(e.child_profile_id);
     }
   }
-  const enrolledChildren = (myChildren ?? []).filter((c) =>
-    enrolledChildIds.includes(c.id)
-  );
 
   const { data: lobbyRows } = await supabase
     .from("session_lobby")
@@ -91,6 +87,11 @@ export default async function LessonSessionPage({
   );
   const hasAdmittedChild = parentLobbyEntries.some((e) => e.status === "admitted");
   const canViewSession = isHost || hasAdmittedChild;
+
+  // Parents join / wait in /kids/join — lesson page is for admitted participants + host.
+  if (!isHost && !canViewSession) {
+    redirect(`/kids/join?classroom=${id}`);
+  }
 
   const { data: characters } = await supabase
     .from("bible_characters")
@@ -137,10 +138,10 @@ export default async function LessonSessionPage({
     <div className="min-h-screen bg-sky-50">
       <header className="border-b border-sky-200 bg-white px-6 py-4">
         <Link
-          href={`/kids/classrooms/${id}`}
+          href={isHost ? `/kids/classrooms/${id}` : `/kids/join?classroom=${id}`}
           className="text-sm text-sky-700 hover:underline"
         >
-          ← {classroom.name}
+          ← {isHost ? classroom.name : "Join a class"}
         </Link>
         <div className="mt-2 flex items-center gap-2">
           <Baby className="h-8 w-8 text-sky-500" />
@@ -171,33 +172,6 @@ export default async function LessonSessionPage({
             lessonId={lessonId}
             lobbyEntries={lobbyEntries}
           />
-        ) : null}
-
-        {!isHost &&
-        enrolledChildren.length > 0 &&
-        lesson.status === "active" &&
-        !canViewSession ? (
-          <ParentJoinSession
-            classroomId={id}
-            lessonId={lessonId}
-            lessonTitle={lesson.title}
-            childrenOptions={enrolledChildren}
-            lobbyEntries={parentLobbyEntries}
-          />
-        ) : null}
-
-        {!isHost && !canViewSession ? (
-          <section className="rounded-xl border border-sky-200 bg-white p-6">
-            <h2 className="font-semibold text-sky-900">Waiting room</h2>
-            <p className="mt-2 text-stone-600">
-              {enrolledChildren.length === 0
-                ? "Enroll a child in this classroom, then request to join the live session."
-                : "Request to join above, then wait for the teacher to admit your child before entering the lesson."}
-            </p>
-            <Link href={`/kids/classrooms/${id}`} className="mt-4 inline-block">
-              <Button variant="outline">Back to classroom</Button>
-            </Link>
-          </section>
         ) : null}
 
         {canViewSession && !lesson.character_id && isHost && lesson.status === "active" ? (
@@ -313,8 +287,10 @@ export default async function LessonSessionPage({
         ) : null}
 
         <div className="flex flex-wrap gap-3">
-          <Link href={`/kids/classrooms/${id}`}>
-            <Button variant="outline">Back to classroom</Button>
+          <Link href={isHost ? `/kids/classrooms/${id}` : `/kids/join?classroom=${id}`}>
+            <Button variant="outline">
+              {isHost ? "Back to classroom" : "Back to Join a class"}
+            </Button>
           </Link>
           {isHost && lesson.status === "active" ? (
             <EndLessonButton classroomId={id} lessonId={lessonId} />

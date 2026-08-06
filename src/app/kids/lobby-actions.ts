@@ -83,7 +83,7 @@ export async function requestJoinSession(
 
   revalidatePath(`/kids/classrooms/${classroomId}`);
   revalidatePath(`/kids/classrooms/${classroomId}/lesson/${lessonId}`);
-  revalidatePath("/kids/children");
+  revalidatePath("/kids/join");
   return { success: `Join request sent for ${child.display_name}. Waiting for teacher approval.` };
 }
 
@@ -127,6 +127,7 @@ export async function admitLobbyChild(
 
   revalidatePath(`/kids/classrooms/${classroomId}`);
   revalidatePath(`/kids/classrooms/${classroomId}/lesson/${lessonId}`);
+  revalidatePath("/kids/join");
   return { success: "Child admitted to the live session." };
 }
 
@@ -153,6 +154,6 @@ export async function leaveLobby(
 
   revalidatePath(`/kids/classrooms/${classroomId}`);
   revalidatePath(`/kids/classrooms/${classroomId}/lesson/${lessonId}`);
-  revalidatePath("/kids/children");
+  revalidatePath("/kids/join");
   return { success: "Left the session lobby." };
 }

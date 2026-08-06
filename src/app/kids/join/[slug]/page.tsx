@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { Baby } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
-export default async function JoinClassroomPage({
+export default async function ClassroomInvitePage({
   params,
 }: {
   params: Promise<{ slug: string }>;
@@ -23,6 +23,29 @@ export default async function JoinClassroomPage({
   const classroom = Array.isArray(classrooms) ? classrooms[0] : classrooms;
   if (!classroom) notFound();
 
+  // If already enrolled, skip enroll and go straight to Join a class.
+  const { data: myChildren } = await supabase
+    .from("child_profiles")
+    .select("id")
+    .eq("parent_user_id", user.id);
+
+  const childIds = (myChildren ?? []).map((c) => c.id);
+  let alreadyEnrolled = false;
+  if (childIds.length > 0) {
+    const { data: enrollment } = await supabase
+      .from("classroom_enrollments")
+      .select("child_profile_id")
+      .eq("classroom_id", classroom.id)
+      .in("child_profile_id", childIds)
+      .limit(1)
+      .maybeSingle();
+    alreadyEnrolled = Boolean(enrollment);
+  }
+
+  if (alreadyEnrolled) {
+    redirect(`/kids/join?classroom=${classroom.id}`);
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-sky-50 px-4 py-12">
       <div className="w-full max-w-md rounded-xl border border-sky-200 bg-white p-8 shadow-sm">
@@ -36,18 +59,19 @@ export default async function JoinClassroomPage({
           </div>
         </div>
         <p className="text-stone-600">
-          To enroll a child, open <strong>My children</strong> and use this invite code:
+          Enroll your child once in this classroom. After that, join live sessions from{" "}
+          <strong>Join a class</strong>.
         </p>
         <p className="mt-3 break-all rounded-lg bg-sky-50 p-3 font-mono text-sm">
           {classroom.invite_code}
         </p>
         <p className="mt-2 text-xs text-stone-500">Or use slug: {classroom.slug}</p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/kids/children">
+          <Link href={`/kids/children?invite=${encodeURIComponent(classroom.slug)}`}>
             <Button>Enroll a child</Button>
           </Link>
-          <Link href={`/kids/classrooms/${classroom.id}`}>
-            <Button variant="outline">View classroom</Button>
+          <Link href="/kids">
+            <Button variant="outline">Kids home</Button>
           </Link>
         </div>
       </div>

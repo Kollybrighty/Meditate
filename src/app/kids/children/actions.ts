@@ -37,6 +37,8 @@ export async function createChildProfile(
   if (error) return { error: error.message };
 
   revalidatePath("/kids/children");
+  revalidatePath("/kids/join");
+  revalidatePath("/kids");
   return { success: "Child profile created." };
 }
 
@@ -89,5 +91,9 @@ export async function enrollChild(
   }
 
   revalidatePath("/kids/children");
-  return { success: `Enrolled in ${classroom.name}.` };
+  revalidatePath("/kids/join");
+  revalidatePath("/kids");
+  return {
+    success: `Enrolled in ${classroom.name}. Next: Join a class when a session is live.`,
+  };
 }

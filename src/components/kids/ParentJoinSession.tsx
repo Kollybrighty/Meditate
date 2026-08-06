@@ -138,9 +138,9 @@ export default function ParentJoinSession({
         </form>
       ) : childrenOptions.length === 0 ? (
         <p className="mt-4 text-sm text-stone-600">
-          Enroll a child first on{" "}
+          Enroll a child first (step 2) on{" "}
           <Link href="/kids/children" className="font-medium text-sky-700 hover:underline">
-            My children
+            Enroll a child
           </Link>
           .
         </p>
