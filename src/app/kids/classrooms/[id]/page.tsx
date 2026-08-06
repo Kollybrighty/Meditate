@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import QRCodeDisplay from "@/components/group/QRCodeDisplay";
 import ShareInvite from "@/components/group/ShareInvite";
 import StartLessonForm from "@/components/kids/StartLessonForm";
+import MaterialUpload from "@/components/kids/MaterialUpload";
 
 function appBaseUrl() {
   const raw =
@@ -57,6 +58,14 @@ export default async function ClassroomPage({
     .from("classroom_enrollments")
     .select("*", { count: "exact", head: true })
     .eq("classroom_id", id);
+
+  const { data: materials } = isHost
+    ? await supabase
+        .from("lesson_materials")
+        .select("id, title, file_url, file_type, created_at")
+        .eq("classroom_id", id)
+        .order("created_at", { ascending: false })
+    : { data: [] as { id: string; title: string; file_url: string; file_type: string; created_at: string }[] };
 
   const joinUrl = `${appBaseUrl()}/kids/join/${classroom.slug}`;
 
@@ -121,6 +130,10 @@ export default async function ClassroomPage({
             <QRCodeDisplay url={joinUrl} />
           </div>
         </section>
+
+        {isHost ? (
+          <MaterialUpload classroomId={id} materials={materials ?? []} />
+        ) : null}
 
         <section className="rounded-xl border border-sky-200 bg-white p-6">
           <h2 className="font-semibold text-sky-900">Recent lessons</h2>
