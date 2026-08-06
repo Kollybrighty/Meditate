@@ -7,6 +7,8 @@ import QRCodeDisplay from "@/components/group/QRCodeDisplay";
 import ShareInvite from "@/components/group/ShareInvite";
 import StartLessonForm from "@/components/kids/StartLessonForm";
 import MaterialUpload from "@/components/kids/MaterialUpload";
+import ParentJoinSession from "@/components/kids/ParentJoinSession";
+import TeacherLobbyPanel from "@/components/kids/TeacherLobbyPanel";
 
 function appBaseUrl() {
   const raw =
@@ -59,6 +61,54 @@ export default async function ClassroomPage({
     .select("*", { count: "exact", head: true })
     .eq("classroom_id", id);
 
+  const { data: myChildren } = await supabase
+    .from("child_profiles")
+    .select("id, display_name")
+    .eq("parent_user_id", user.id);
+
+  const enrolledChildIds: string[] = [];
+  if (myChildren && myChildren.length > 0) {
+    const { data: enrollments } = await supabase
+      .from("classroom_enrollments")
+      .select("child_profile_id")
+      .eq("classroom_id", id)
+      .in(
+        "child_profile_id",
+        myChildren.map((c) => c.id)
+      );
+    for (const e of enrollments ?? []) {
+      enrolledChildIds.push(e.child_profile_id);
+    }
+  }
+
+  const enrolledChildren = (myChildren ?? []).filter((c) =>
+    enrolledChildIds.includes(c.id)
+  );
+  const isEnrolledParent = enrolledChildren.length > 0;
+
+  let lobbyEntries: {
+    id: string;
+    child_profile_id: string;
+    status: string;
+    joined_at: string;
+    child_profiles?: { display_name: string; age: number | null } | null;
+  }[] = [];
+
+  if (activeLesson && (isHost || isEnrolledParent)) {
+    const { data } = await supabase
+      .from("session_lobby")
+      .select("id, child_profile_id, status, joined_at, child_profiles(display_name, age)")
+      .eq("classroom_id", id)
+      .eq("lesson_id", activeLesson.id)
+      .in("status", ["waiting", "admitted"])
+      .order("joined_at", { ascending: true });
+    lobbyEntries = (data as typeof lobbyEntries) ?? [];
+  }
+
+  const parentLobbyEntries = isHost
+    ? []
+    : lobbyEntries.filter((e) => enrolledChildIds.includes(e.child_profile_id));
+
   const { data: materials } = isHost
     ? await supabase
         .from("lesson_materials")
@@ -84,7 +134,7 @@ export default async function ClassroomPage({
         ) : null}
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-10 space-y-8">
+      <main className="mx-auto max-w-3xl space-y-8 px-6 py-10">
         <section className="rounded-xl border border-sky-200 bg-white p-6">
           <h2 className="font-semibold text-sky-900">Kids session</h2>
           {activeLesson ? (
@@ -92,9 +142,11 @@ export default async function ClassroomPage({
               <p className="text-stone-700">
                 Active lesson: <span className="font-medium">{activeLesson.title}</span>
               </p>
-              <Link href={`/kids/classrooms/${id}/lesson/${activeLesson.id}`}>
-                <Button>Open live session</Button>
-              </Link>
+              {isHost ? (
+                <Link href={`/kids/classrooms/${id}/lesson/${activeLesson.id}`}>
+                  <Button>Open live session</Button>
+                </Link>
+              ) : null}
             </div>
           ) : isHost ? (
             <div className="mt-3">
@@ -110,26 +162,46 @@ export default async function ClassroomPage({
           )}
         </section>
 
-        <section className="rounded-xl border border-sky-200 bg-white p-6">
-          <h2 className="font-semibold text-sky-900">Invite families</h2>
-          <p className="mt-1 text-sm text-stone-600">
-            Share this link or QR so parents can enroll their children.
-          </p>
-          <p className="mt-2 text-sm text-stone-500">
-            Enrolled children: {enrollmentCount ?? 0}
-          </p>
-          <div className="mt-4 break-all rounded-lg bg-sky-50 p-3 font-mono text-sm">
-            {joinUrl}
-          </div>
-          <ShareInvite
-            url={joinUrl}
-            groupName={classroom.name}
-            shareLabel="Kids classroom"
+        {activeLesson && isHost ? (
+          <TeacherLobbyPanel
+            classroomId={id}
+            lessonId={activeLesson.id}
+            lobbyEntries={lobbyEntries}
           />
-          <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row">
-            <QRCodeDisplay url={joinUrl} />
-          </div>
-        </section>
+        ) : null}
+
+        {activeLesson && isEnrolledParent ? (
+          <ParentJoinSession
+            classroomId={id}
+            lessonId={activeLesson.id}
+            lessonTitle={activeLesson.title}
+            childrenOptions={enrolledChildren}
+            lobbyEntries={parentLobbyEntries}
+          />
+        ) : null}
+
+        {isHost ? (
+          <section className="rounded-xl border border-sky-200 bg-white p-6">
+            <h2 className="font-semibold text-sky-900">Invite families</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Share this link or QR so parents can enroll their children.
+            </p>
+            <p className="mt-2 text-sm text-stone-500">
+              Enrolled children: {enrollmentCount ?? 0}
+            </p>
+            <div className="mt-4 break-all rounded-lg bg-sky-50 p-3 font-mono text-sm">
+              {joinUrl}
+            </div>
+            <ShareInvite
+              url={joinUrl}
+              groupName={classroom.name}
+              shareLabel="Kids classroom"
+            />
+            <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row">
+              <QRCodeDisplay url={joinUrl} />
+            </div>
+          </section>
+        ) : null}
 
         {isHost ? (
           <MaterialUpload classroomId={id} materials={materials ?? []} />

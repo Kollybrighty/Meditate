@@ -7,6 +7,8 @@ import EndLessonButton from "@/components/kids/EndLessonButton";
 import CharacterPicker from "@/components/kids/CharacterPicker";
 import ContributionBoard from "@/components/kids/ContributionBoard";
 import NextToQuizButton from "@/components/kids/NextToQuizButton";
+import TeacherLobbyPanel from "@/components/kids/TeacherLobbyPanel";
+import ParentJoinSession from "@/components/kids/ParentJoinSession";
 
 export default async function LessonSessionPage({
   params,
@@ -38,6 +40,44 @@ export default async function LessonSessionPage({
   if (!lesson) notFound();
 
   const isHost = classroom.host_id === user.id;
+
+  const { data: myChildren } = await supabase
+    .from("child_profiles")
+    .select("id, display_name")
+    .eq("parent_user_id", user.id);
+
+  const enrolledChildIds: string[] = [];
+  if (myChildren && myChildren.length > 0) {
+    const { data: enrollments } = await supabase
+      .from("classroom_enrollments")
+      .select("child_profile_id")
+      .eq("classroom_id", id)
+      .in(
+        "child_profile_id",
+        myChildren.map((c) => c.id)
+      );
+    for (const e of enrollments ?? []) {
+      enrolledChildIds.push(e.child_profile_id);
+    }
+  }
+  const enrolledChildren = (myChildren ?? []).filter((c) =>
+    enrolledChildIds.includes(c.id)
+  );
+
+  const { data: lobbyRows } = await supabase
+    .from("session_lobby")
+    .select("id, child_profile_id, status, joined_at, child_profiles(display_name, age)")
+    .eq("classroom_id", id)
+    .eq("lesson_id", lessonId)
+    .in("status", ["waiting", "admitted"])
+    .order("joined_at", { ascending: true });
+
+  const lobbyEntries = lobbyRows ?? [];
+  const parentLobbyEntries = lobbyEntries.filter((e) =>
+    enrolledChildIds.includes(e.child_profile_id)
+  );
+  const hasAdmittedChild = parentLobbyEntries.some((e) => e.status === "admitted");
+  const canViewSession = isHost || hasAdmittedChild;
 
   const { data: characters } = await supabase
     .from("bible_characters")
@@ -104,7 +144,7 @@ export default async function LessonSessionPage({
       <main className="mx-auto max-w-3xl space-y-6 px-6 py-10">
         {lesson.status === "active" ? (
           <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Session is live. Families can join from the classroom invite link.
+            Session is live.
           </p>
         ) : (
           <p className="rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-600">
@@ -112,7 +152,39 @@ export default async function LessonSessionPage({
           </p>
         )}
 
-        {!lesson.character_id && isHost && lesson.status === "active" ? (
+        {isHost && lesson.status === "active" ? (
+          <TeacherLobbyPanel
+            classroomId={id}
+            lessonId={lessonId}
+            lobbyEntries={lobbyEntries}
+          />
+        ) : null}
+
+        {!isHost && enrolledChildren.length > 0 && lesson.status === "active" && !canViewSession ? (
+          <ParentJoinSession
+            classroomId={id}
+            lessonId={lessonId}
+            lessonTitle={lesson.title}
+            childrenOptions={enrolledChildren}
+            lobbyEntries={parentLobbyEntries}
+          />
+        ) : null}
+
+        {!isHost && !canViewSession ? (
+          <section className="rounded-xl border border-sky-200 bg-white p-6">
+            <h2 className="font-semibold text-sky-900">Waiting room</h2>
+            <p className="mt-2 text-stone-600">
+              {enrolledChildren.length === 0
+                ? "Enroll a child in this classroom, then request to join the live session."
+                : "Request to join above, then wait for the teacher to admit your child before entering the lesson."}
+            </p>
+            <Link href={`/kids/classrooms/${id}`} className="mt-4 inline-block">
+              <Button variant="outline">Back to classroom</Button>
+            </Link>
+          </section>
+        ) : null}
+
+        {canViewSession && !lesson.character_id && isHost && lesson.status === "active" ? (
           <CharacterPicker
             classroomId={id}
             lessonId={lessonId}
@@ -120,16 +192,16 @@ export default async function LessonSessionPage({
           />
         ) : null}
 
-        {!lesson.character_id && !isHost ? (
+        {canViewSession && !lesson.character_id && !isHost ? (
           <section className="rounded-xl border border-sky-200 bg-white p-6">
             <h2 className="font-semibold text-sky-900">Waiting for teacher</h2>
             <p className="mt-2 text-stone-600">
-              The teacher is choosing a Bible character for this lesson.
+              You&apos;re in the session. The teacher is choosing a Bible character.
             </p>
           </section>
         ) : null}
 
-        {selectedCharacter ? (
+        {canViewSession && selectedCharacter ? (
           <>
             <section className="rounded-xl border border-sky-200 bg-white p-6">
               <h2 className="font-semibold text-sky-900">
@@ -216,6 +288,10 @@ export default async function LessonSessionPage({
                   )}
                 </div>
               </section>
+            ) : openQuiz && canViewSession ? (
+              <Link href={`/kids/classrooms/${id}/lesson/${lessonId}/quiz/${openQuiz.id}`}>
+                <Button>Go to quiz</Button>
+              </Link>
             ) : null}
           </>
         ) : null}
