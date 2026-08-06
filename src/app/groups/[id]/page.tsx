@@ -4,6 +4,18 @@ import { redirect, notFound } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
 import QRCodeDisplay from "@/components/group/QRCodeDisplay";
+import ShareInvite from "@/components/group/ShareInvite";
+import StartDateEditor from "@/components/group/StartDateEditor";
+
+function appBaseUrl() {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : null) ||
+    "http://localhost:3000";
+  return raw.replace(/\/$/, "");
+}
 
 export default async function GroupPage({
   params,
@@ -25,8 +37,19 @@ export default async function GroupPage({
 
   if (!group) notFound();
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const joinUrl = `${appUrl}/join/${group.slug}`;
+  const { data: membership } = await supabase
+    .from("group_members")
+    .select("role")
+    .eq("group_id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const canEditStartDate =
+    group.created_by === user.id ||
+    membership?.role === "owner" ||
+    membership?.role === "admin";
+
+  const joinUrl = `${appBaseUrl()}/join/${group.slug}`;
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -43,12 +66,21 @@ export default async function GroupPage({
           {group.reading_scope.replace(/_/g, " ")} · {group.plan_type}
         </p>
 
+        <StartDateEditor
+          groupId={id}
+          startDate={group.start_date ?? null}
+          canEdit={canEditStartDate}
+        />
+
         <section className="mt-8 rounded-xl border border-stone-200 bg-white p-6">
           <h2 className="font-semibold">Invite members</h2>
-          <p className="mt-1 text-sm text-stone-600">Share this link or QR code with your group.</p>
+          <p className="mt-1 text-sm text-stone-600">
+            Share this link or QR code with your group.
+          </p>
           <div className="mt-4 break-all rounded-lg bg-stone-100 p-3 font-mono text-sm">
             {joinUrl}
           </div>
+          <ShareInvite url={joinUrl} groupName={group.name} />
           <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row">
             <QRCodeDisplay url={joinUrl} />
           </div>

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS groups (
   slug TEXT UNIQUE NOT NULL,
   reading_scope TEXT NOT NULL CHECK (reading_scope IN ('full_bible', 'old_testament', 'new_testament', 'chronological')),
   plan_type TEXT NOT NULL CHECK (plan_type IN ('3m', '6m', '12m', 'yearly')),
+  start_date DATE,
   created_by UUID NOT NULL REFERENCES profiles(id),
   invite_code TEXT UNIQUE NOT NULL,
   timezone TEXT DEFAULT 'UTC',
@@ -242,25 +243,33 @@ CREATE TABLE IF NOT EXISTS quiz_responses (
 );
 
 -- Auto-create profile on signup
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  INSERT INTO profiles (id, email, username, full_name, church)
+  INSERT INTO public.profiles (id, email, username, full_name, church)
   VALUES (
     NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    COALESCE(NEW.email, ''),
+    COALESCE(
+      NULLIF(NEW.raw_user_meta_data->>'username', ''),
+      split_part(COALESCE(NEW.email, 'user'), '@', 1)
+    ),
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'full_name', ''), 'User'),
     NEW.raw_user_meta_data->>'church'
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
 
 -- RLS
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -279,11 +288,72 @@ DROP POLICY IF EXISTS "Classrooms viewable by host or enrolled parent" ON classr
 CREATE POLICY "Profiles viewable by owner" ON profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Profiles updatable by owner" ON profiles FOR UPDATE USING (auth.uid() = id);
 
-CREATE POLICY "Groups viewable by members" ON groups FOR SELECT
-  USING (EXISTS (SELECT 1 FROM group_members WHERE group_id = groups.id AND user_id = auth.uid()));
+CREATE OR REPLACE FUNCTION public.is_group_member(gid uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.group_members
+    WHERE group_id = gid
+      AND user_id = auth.uid()
+  );
+$$;
 
-CREATE POLICY "Group members viewable by members" ON group_members FOR SELECT
-  USING (EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = group_members.group_id AND gm.user_id = auth.uid()));
+CREATE POLICY "Groups viewable by members" ON groups
+  FOR SELECT
+  USING (created_by = auth.uid() OR public.is_group_member(id));
+
+CREATE POLICY "Groups insertable by creator" ON groups
+  FOR INSERT
+  WITH CHECK (auth.uid() = created_by);
+
+CREATE OR REPLACE FUNCTION public.is_group_owner(gid uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.group_members
+    WHERE group_id = gid
+      AND user_id = auth.uid()
+      AND role IN ('owner', 'admin')
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM public.groups
+    WHERE id = gid
+      AND created_by = auth.uid()
+  );
+$$;
+
+CREATE POLICY "Groups updatable by owner" ON groups
+  FOR UPDATE
+  USING (public.is_group_owner(id))
+  WITH CHECK (public.is_group_owner(id));
+
+CREATE POLICY "Group members viewable by members" ON group_members
+  FOR SELECT
+  USING (user_id = auth.uid() OR public.is_group_member(group_id));
+
+CREATE POLICY "Group members insertable by self" ON group_members
+  FOR INSERT
+  WITH CHECK (
+    user_id = auth.uid()
+    AND (
+      public.is_group_member(group_id)
+      OR EXISTS (
+        SELECT 1 FROM public.groups g
+        WHERE g.id = group_id AND g.created_by = auth.uid()
+      )
+    )
+  );
 
 CREATE POLICY "Child profiles by parent" ON child_profiles FOR ALL USING (parent_user_id = auth.uid());
 

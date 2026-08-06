@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { createGroup } from "./actions";
+import { createGroup, type CreateGroupState } from "./actions";
 
 const SCOPES = [
   { value: "full_bible", label: "Genesis to Revelation" },
@@ -26,8 +26,11 @@ const NT_DURATIONS = [
   { value: "6m", label: "6 months" },
 ];
 
+const initialState: CreateGroupState = {};
+
 export default function NewGroupPage() {
   const [scope, setScope] = useState("full_bible");
+  const [state, formAction, pending] = useActionState(createGroup, initialState);
   const durations = scope === "new_testament" ? NT_DURATIONS : ALL_DURATIONS;
 
   return (
@@ -41,7 +44,12 @@ export default function NewGroupPage() {
           <h1 className="text-2xl font-bold text-earth">Create Bible study group</h1>
         </div>
 
-        <form action={createGroup} className="space-y-5 rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
+        <form action={formAction} className="space-y-5 rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
+          {state.error ? (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              {state.error}
+            </p>
+          ) : null}
           <div>
             <label htmlFor="name" className="mb-1 block text-sm font-medium">
               Group name (must be unique)
@@ -91,8 +99,18 @@ export default function NewGroupPage() {
             )}
           </div>
 
-          <Button type="submit" className="w-full">
-            Create group
+          <div>
+            <label htmlFor="startDate" className="mb-1 block text-sm font-medium">
+              Plan start date <span className="font-normal text-stone-500">(optional)</span>
+            </label>
+            <Input id="startDate" name="startDate" type="date" />
+            <p className="mt-1 text-xs text-stone-500">
+              Leave blank if you&apos;re not ready yet — you can set or change it later.
+            </p>
+          </div>
+
+          <Button type="submit" className="w-full" disabled={pending}>
+            {pending ? "Creating group…" : "Create group"}
           </Button>
         </form>
       </div>
