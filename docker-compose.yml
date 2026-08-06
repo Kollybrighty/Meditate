@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    depends_on:
+      - db
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: http://kong:8000
+    restart: unless-stopped
+
+  db:
+    image: supabase/postgres:15.8.1.060
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - meditate-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  meditate-db:

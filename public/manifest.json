@@ -1,0 +1,17 @@
+{
+  "name": "Meditate",
+  "short_name": "Meditate",
+  "description": "Group Bible study — read together, grow together.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F5",
+  "theme_color": "#B8860B",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
