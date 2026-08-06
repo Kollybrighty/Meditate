@@ -10,6 +10,17 @@ import NextToQuizButton from "@/components/kids/NextToQuizButton";
 import TeacherLobbyPanel from "@/components/kids/TeacherLobbyPanel";
 import ParentJoinSession from "@/components/kids/ParentJoinSession";
 
+type LobbyEntry = {
+  id: string;
+  child_profile_id: string;
+  status: string;
+  joined_at: string;
+  child_profiles?:
+    | { display_name: string; age: number | null }
+    | { display_name: string; age: number | null }[]
+    | null;
+};
+
 export default async function LessonSessionPage({
   params,
 }: {
@@ -66,13 +77,15 @@ export default async function LessonSessionPage({
 
   const { data: lobbyRows } = await supabase
     .from("session_lobby")
-    .select("id, child_profile_id, status, joined_at, child_profiles(display_name, age)")
+    .select(
+      "id, child_profile_id, status, joined_at, child_profiles(display_name, age)"
+    )
     .eq("classroom_id", id)
     .eq("lesson_id", lessonId)
     .in("status", ["waiting", "admitted"])
     .order("joined_at", { ascending: true });
 
-  const lobbyEntries = lobbyRows ?? [];
+  const lobbyEntries = (lobbyRows ?? []) as LobbyEntry[];
   const parentLobbyEntries = lobbyEntries.filter((e) =>
     enrolledChildIds.includes(e.child_profile_id)
   );
@@ -160,7 +173,10 @@ export default async function LessonSessionPage({
           />
         ) : null}
 
-        {!isHost && enrolledChildren.length > 0 && lesson.status === "active" && !canViewSession ? (
+        {!isHost &&
+        enrolledChildren.length > 0 &&
+        lesson.status === "active" &&
+        !canViewSession ? (
           <ParentJoinSession
             classroomId={id}
             lessonId={lessonId}
