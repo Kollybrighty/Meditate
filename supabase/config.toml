@@ -29,8 +29,8 @@ file_size_limit = "10MiB"
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/**"]
+site_url = "https://meditate-alpha.vercel.app"
+additional_redirect_urls = ["https://meditate-alpha.vercel.app/**", "http://localhost:3000/**"]
 jwt_expiry = 3600
 enable_signup = true
 

@@ -4,7 +4,14 @@ import "@/lib/supabase/tls-dev";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
-export async function signUp(formData: FormData) {
+export type AuthActionState = {
+  error?: string;
+};
+
+export async function signUp(
+  _prev: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   const supabase = await createClient();
 
   const email = formData.get("email") as string;
@@ -22,13 +29,16 @@ export async function signUp(formData: FormData) {
   });
 
   if (error) {
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
   redirect("/dashboard");
 }
 
-export async function signIn(formData: FormData) {
+export async function signIn(
+  _prev: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   const supabase = await createClient();
 
   const email = formData.get("email") as string;
@@ -37,7 +47,7 @@ export async function signIn(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
   redirect("/dashboard");
