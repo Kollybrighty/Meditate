@@ -7,9 +7,15 @@ import { Check, Copy, Facebook, MessageCircle, Share2 } from "lucide-react";
 type ShareInviteProps = {
   url: string;
   groupName: string;
+  /** Defaults to Bible study group wording */
+  shareLabel?: string;
 };
 
-export default function ShareInvite({ url, groupName }: ShareInviteProps) {
+export default function ShareInvite({
+  url,
+  groupName,
+  shareLabel = "Bible study group",
+}: ShareInviteProps) {
   const [copied, setCopied] = useState(false);
   const [canNativeShare, setCanNativeShare] = useState(false);
 
@@ -18,8 +24,8 @@ export default function ShareInvite({ url, groupName }: ShareInviteProps) {
   }, []);
 
   const message = useMemo(
-    () => `Join our Bible study group "${groupName}" on Meditate: ${url}`,
-    [groupName, url]
+    () => `Join our ${shareLabel} "${groupName}" on Meditate: ${url}`,
+    [groupName, shareLabel, url]
   );
 
   const encodedMessage = encodeURIComponent(message);
@@ -53,7 +59,7 @@ export default function ShareInvite({ url, groupName }: ShareInviteProps) {
     try {
       await navigator.share({
         title: `Join ${groupName} on Meditate`,
-        text: `Join our Bible study group "${groupName}" on Meditate`,
+        text: `Join our ${shareLabel} "${groupName}" on Meditate`,
         url,
       });
     } catch {
