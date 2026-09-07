@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Baby } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import ClassroomManageMenu from "@/components/kids/ClassroomManageMenu";
+import { listStaffClassrooms } from "@/lib/kids/staff";
 
 export default async function HostClassroomsPage() {
   const supabase = await createClient();
@@ -11,11 +13,10 @@ export default async function HostClassroomsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: classrooms } = await supabase
-    .from("classrooms")
-    .select("id, name, age_range, slug, created_at")
-    .eq("host_id", user.id)
-    .order("created_at", { ascending: false });
+  const classrooms = await listStaffClassrooms(supabase, user.id);
+  classrooms.sort(
+    (a, b) => a.name.localeCompare(b.name)
+  );
 
   const classroomIds = (classrooms ?? []).map((c) => c.id);
   const liveByClassroom = new Map<string, { id: string; title: string }>();
@@ -54,21 +55,29 @@ export default async function HostClassroomsPage() {
 
         <section className="rounded-xl border border-sky-200 bg-white p-6">
           <h2 className="font-semibold text-sky-900">Your classrooms</h2>
-          {classrooms && classrooms.length > 0 ? (
+          {classrooms.length > 0 ? (
             <ul className="mt-3 space-y-3">
               {classrooms.map((classroom) => {
                 const live = liveByClassroom.get(classroom.id);
                 return (
                   <li
                     key={classroom.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-100 px-4 py-3"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-100 px-3 py-3"
                   >
-                    <div>
-                      <p className="font-medium text-stone-900">{classroom.name}</p>
-                      <p className="text-sm text-stone-500">
-                        {classroom.age_range ?? "All ages"}
-                        {live ? ` · Live: ${live.title}` : ""}
-                      </p>
+                    <div className="flex min-w-0 flex-1 items-start gap-1">
+                      <ClassroomManageMenu
+                        classroomId={classroom.id}
+                        classroomName={classroom.name}
+                        canManage={classroom.isOwner}
+                      />
+                      <div className="min-w-0 pt-1">
+                        <p className="font-medium text-stone-900">{classroom.name}</p>
+                        <p className="text-sm text-stone-500">
+                          {classroom.age_range ?? "All ages"}
+                          {classroom.isOwner ? "" : " · Co-teacher"}
+                          {live ? ` · Live: ${live.title}` : ""}
+                        </p>
+                      </div>
                     </div>
                     <Link href={`/kids/classrooms/${classroom.id}`}>
                       <Button size="sm" variant={live ? "primary" : "outline"}>

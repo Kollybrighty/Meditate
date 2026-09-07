@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { formatShortDate } from "@/lib/dates";
 import {
   updateGroupStartDate,
   type UpdateStartDateState,
@@ -27,12 +28,7 @@ export default function StartDateEditor({
   );
 
   const formatted = startDate
-    ? new Date(`${startDate}T00:00:00`).toLocaleDateString(undefined, {
-        weekday: "short",
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
+    ? formatShortDate(startDate)
     : "Not set yet";
 
   if (!canEdit) {

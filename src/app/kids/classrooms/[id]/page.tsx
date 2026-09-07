@@ -9,16 +9,11 @@ import StartLessonForm from "@/components/kids/StartLessonForm";
 import MaterialUpload from "@/components/kids/MaterialUpload";
 import TeacherLobbyPanel from "@/components/kids/TeacherLobbyPanel";
 import DeleteClassroomButton from "@/components/kids/DeleteClassroomButton";
-
-function appBaseUrl() {
-  const raw =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : null) ||
-    "http://localhost:3000";
-  return raw.replace(/\/$/, "");
-}
+import ClassroomManageMenu from "@/components/kids/ClassroomManageMenu";
+import InviteUrl from "@/components/group/InviteUrl";
+import { appBaseUrl } from "@/lib/app-url";
+import { isClassroomStaff } from "@/lib/kids/staff";
+import CoTeacherPanel, { type ClassroomTeacher } from "@/components/kids/CoTeacherPanel";
 
 export default async function ClassroomPage({
   params,
@@ -40,10 +35,11 @@ export default async function ClassroomPage({
 
   if (!classroom) notFound();
 
-  const isHost = classroom.host_id === user.id;
+  const isOwner = classroom.host_id === user.id;
+  const isStaff = await isClassroomStaff(supabase, id, user.id, classroom.host_id);
 
-  // Parents join live sessions from /kids/join — keep this page for hosting.
-  if (!isHost) {
+  // Parents join live sessions from /kids/join — keep this page for teachers.
+  if (!isStaff) {
     redirect(`/kids/join?classroom=${id}`);
   }
 
@@ -71,7 +67,10 @@ export default async function ClassroomPage({
     child_profile_id: string;
     status: string;
     joined_at: string;
-    child_profiles?: { display_name: string; age: number | null } | null;
+    child_profiles?:
+      | { display_name: string; age: number | null }
+      | { display_name: string; age: number | null }[]
+      | null;
   }[] = [];
 
   if (activeLesson) {
@@ -91,7 +90,20 @@ export default async function ClassroomPage({
     .eq("classroom_id", id)
     .order("created_at", { ascending: false });
 
-  const enrollInviteUrl = `${appBaseUrl()}/kids/join/${classroom.slug}`;
+  const { data: teacherRows } = await supabase.rpc("list_classroom_teachers", {
+    cid: id,
+  });
+  const teachers: ClassroomTeacher[] = [...((teacherRows ?? []) as ClassroomTeacher[])];
+  if (!teachers.some((row) => row.user_id === classroom.host_id)) {
+    teachers.unshift({
+      user_id: classroom.host_id,
+      role: "host",
+      full_name: "Host",
+      username: "",
+    });
+  }
+
+  const enrollInviteUrl = `${await appBaseUrl()}/kids/join/${encodeURIComponent(classroom.slug)}`;
 
   return (
     <div className="min-h-screen bg-sky-50">
@@ -99,7 +111,12 @@ export default async function ClassroomPage({
         <Link href="/kids/host" className="text-sm text-sky-700 hover:underline">
           ← Your classrooms
         </Link>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-1">
+          <ClassroomManageMenu
+            classroomId={id}
+            classroomName={classroom.name}
+            canManage={isOwner}
+          />
           <Baby className="h-8 w-8 text-sky-500" />
           <h1 className="text-2xl font-bold text-sky-900">{classroom.name}</h1>
         </div>
@@ -138,6 +155,8 @@ export default async function ClassroomPage({
           />
         ) : null}
 
+        <MaterialUpload classroomId={id} materials={materials ?? []} />
+
         <section className="rounded-xl border border-sky-200 bg-white p-6">
           <h2 className="font-semibold text-sky-900">Invite families to enroll</h2>
           <p className="mt-1 text-sm text-stone-600">
@@ -147,9 +166,7 @@ export default async function ClassroomPage({
           <p className="mt-2 text-sm text-stone-500">
             Enrolled children: {enrollmentCount ?? 0}
           </p>
-          <div className="mt-4 break-all rounded-lg bg-sky-50 p-3 font-mono text-sm">
-            {enrollInviteUrl}
-          </div>
+          <InviteUrl url={enrollInviteUrl} className="bg-sky-50" />
           <ShareInvite
             url={enrollInviteUrl}
             groupName={classroom.name}
@@ -160,7 +177,12 @@ export default async function ClassroomPage({
           </div>
         </section>
 
-        <MaterialUpload classroomId={id} materials={materials ?? []} />
+        <CoTeacherPanel
+          classroomId={id}
+          teachers={teachers}
+          hostId={classroom.host_id}
+          isOwner={isOwner}
+        />
 
         <section className="rounded-xl border border-sky-200 bg-white p-6">
           <h2 className="font-semibold text-sky-900">Recent lessons</h2>
@@ -185,15 +207,18 @@ export default async function ClassroomPage({
           )}
         </section>
 
-        <section className="rounded-xl border border-red-200 bg-white p-6">
-          <h2 className="font-semibold text-red-900">Delete classroom</h2>
+        <section className="rounded-xl border border-sky-200 bg-white p-6">
+          <h2 className="font-semibold text-sky-900">Classroom settings</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Permanently remove this class and its sessions. Enrolled families will no longer see
-            it under Join a class.
+            {isOwner
+              ? "Rename this class with the pencil next to the title, or delete it below. Deleting removes enrollments and lessons."
+              : "Only the classroom host can rename or delete this class."}
           </p>
-          <div className="mt-4">
-            <DeleteClassroomButton classroomId={id} classroomName={classroom.name} />
-          </div>
+          {isOwner ? (
+            <div className="mt-4">
+              <DeleteClassroomButton classroomId={id} classroomName={classroom.name} />
+            </div>
+          ) : null}
         </section>
 
         <div className="flex flex-wrap gap-3">

@@ -1,21 +1,17 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { redirect, notFound } from "next/navigation";
-import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
 import QRCodeDisplay from "@/components/group/QRCodeDisplay";
 import ShareInvite from "@/components/group/ShareInvite";
 import StartDateEditor from "@/components/group/StartDateEditor";
-
-function appBaseUrl() {
-  const raw =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : null) ||
-    "http://localhost:3000";
-  return raw.replace(/\/$/, "");
-}
+import InviteUrl from "@/components/group/InviteUrl";
+import { appBaseUrl } from "@/lib/app-url";
+import { getGroupContext } from "@/lib/groups";
+import {
+  formatReadingRange,
+  readingForDate,
+  todayIso,
+} from "@/lib/bible/plan";
 
 export default async function GroupPage({
   params,
@@ -23,81 +19,81 @@ export default async function GroupPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const { group, isAdmin } = await getGroupContext(id);
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
-  const { data: group } = await supabase
-    .from("groups")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (!group) notFound();
-
-  const { data: membership } = await supabase
+  const { count: memberCount } = await supabase
     .from("group_members")
-    .select("role")
-    .eq("group_id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .select("*", { count: "exact", head: true })
+    .eq("group_id", id);
 
-  const canEditStartDate =
-    group.created_by === user.id ||
-    membership?.role === "owner" ||
-    membership?.role === "admin";
+  const today = todayIso(group.timezone || "UTC");
+  const todaysReading =
+    group.start_date
+      ? readingForDate({
+          readingScope: group.reading_scope,
+          planType: group.plan_type,
+          startDate: group.start_date,
+          date: today,
+        })
+      : null;
 
-  const joinUrl = `${appBaseUrl()}/join/${group.slug}`;
+  const joinUrl = `${await appBaseUrl()}/join/${encodeURIComponent(group.slug)}`;
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-stone-200 bg-white px-6 py-4">
-        <Link href="/dashboard" className="inline-flex items-center gap-2">
-          <Logo className="h-8 w-8" />
-          <span className="font-semibold text-earth">{group.name}</span>
-        </Link>
-      </header>
+    <>
+      <h1 className="text-2xl font-bold">{group.name}</h1>
+      <p className="mt-1 capitalize text-stone-600">
+        {group.reading_scope.replace(/_/g, " ")} · {group.plan_type}
+        {memberCount != null ? ` · ${memberCount} member${memberCount === 1 ? "" : "s"}` : ""}
+      </p>
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-bold">{group.name}</h1>
-        <p className="mt-1 text-stone-600 capitalize">
-          {group.reading_scope.replace(/_/g, " ")} · {group.plan_type}
-        </p>
-
-        <StartDateEditor
-          groupId={id}
-          startDate={group.start_date ?? null}
-          canEdit={canEditStartDate}
-        />
-
-        <section className="mt-8 rounded-xl border border-stone-200 bg-white p-6">
-          <h2 className="font-semibold">Invite members</h2>
-          <p className="mt-1 text-sm text-stone-600">
-            Share this link or QR code with your group.
+      <section className="mt-8 rounded-xl border border-stone-200 bg-white p-6">
+        <h2 className="font-semibold">Today&apos;s reading</h2>
+        {todaysReading && todaysReading.chapters.length > 0 ? (
+          <>
+            <p className="mt-2 text-stone-800">
+              {formatReadingRange(todaysReading.chapters)}
+            </p>
+            <p className="mt-1 text-sm text-stone-500">
+              Day {todaysReading.dayIndex + 1}
+            </p>
+            <Link href={`/groups/${id}/read`} className="mt-4 inline-block">
+              <Button>Open today&apos;s reading</Button>
+            </Link>
+          </>
+        ) : group.start_date ? (
+          <p className="mt-2 text-sm text-stone-600">
+            There is no scheduled reading for today. The plan may not have
+            started yet, or it may have finished.
           </p>
-          <div className="mt-4 break-all rounded-lg bg-stone-100 p-3 font-mono text-sm">
-            {joinUrl}
-          </div>
-          <ShareInvite url={joinUrl} groupName={group.name} />
-          <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row">
-            <QRCodeDisplay url={joinUrl} />
-          </div>
-        </section>
+        ) : (
+          <p className="mt-2 text-sm text-stone-600">
+            {isAdmin
+              ? "Set a plan start date so the group can begin daily reading."
+              : "Waiting for a group admin to set the plan start date."}
+          </p>
+        )}
+      </section>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link href={`/groups/${id}/members`}>
-            <Button variant="outline">Members & progress</Button>
-          </Link>
-          <Link href={`/groups/${id}/forum`}>
-            <Button variant="outline">Q&amp;A forum</Button>
-          </Link>
-          <Link href={`/groups/${id}/read`}>
-            <Button>Today&apos;s reading</Button>
-          </Link>
+      <StartDateEditor
+        groupId={id}
+        startDate={group.start_date ?? null}
+        canEdit={isAdmin}
+      />
+
+      <section className="mt-8 rounded-xl border border-stone-200 bg-white p-6">
+        <h2 className="font-semibold">Invite members</h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Share this link or QR code. Anyone who opens it can join and will
+          immediately get reading, members, and the Q&amp;A forum.
+        </p>
+        <InviteUrl url={joinUrl} />
+        <ShareInvite url={joinUrl} groupName={group.name} />
+        <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row">
+          <QRCodeDisplay url={joinUrl} />
         </div>
-      </main>
-    </div>
+      </section>
+    </>
   );
 }

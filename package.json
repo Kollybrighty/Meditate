@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "db:migrate": "npx supabase db push",
     "supabase:login": "npx supabase login",
     "supabase:link": "npx supabase link",
@@ -41,6 +42,7 @@
     "eslint-config-next": "^15.3.3",
     "supabase": "^2.110.0",
     "tailwindcss": "^4.1.8",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.11"
   }
 }

@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireClassroomStaff } from "@/lib/kids/staff";
+import { completeKidsSession, revalidateEndedSession } from "@/lib/kids/session-end";
 
 export async function endKidsLesson(classroomId: string, lessonId: string) {
   const supabase = await createClient();
@@ -11,19 +13,14 @@ export async function endKidsLesson(classroomId: string, lessonId: string) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error } = await supabase
-    .from("kids_lessons")
-    .update({
-      status: "completed",
-      ended_at: new Date().toISOString(),
-    })
-    .eq("id", lessonId)
-    .eq("classroom_id", classroomId)
-    .eq("host_id", user.id);
+  const staff = await requireClassroomStaff(supabase, classroomId, user.id);
+  if (!staff.ok) throw new Error(staff.error);
 
-  if (error) throw new Error(error.message);
+  const result = await completeKidsSession(supabase, classroomId, lessonId);
+  if (result.error) throw new Error(result.error);
 
-  revalidatePath(`/kids/classrooms/${classroomId}`);
-  revalidatePath(`/kids/classrooms/${classroomId}/lesson/${lessonId}`);
+  for (const path of revalidateEndedSession(classroomId, lessonId)) {
+    revalidatePath(path);
+  }
   redirect(`/kids/classrooms/${classroomId}`);
 }

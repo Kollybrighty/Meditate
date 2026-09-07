@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { notifyClassroomStaff } from "@/lib/notify-classroom";
+import { requireClassroomStaff } from "@/lib/kids/staff";
 
 export type LobbyActionState = {
   error?: string;
@@ -81,9 +83,17 @@ export async function requestJoinSession(
 
   if (error) return { error: error.message };
 
+  await notifyClassroomStaff({
+    classroomId,
+    type: "kids_lobby",
+    referenceId: lessonId,
+    actorId: user.id,
+  });
+
   revalidatePath(`/kids/classrooms/${classroomId}`);
   revalidatePath(`/kids/classrooms/${classroomId}/lesson/${lessonId}`);
   revalidatePath("/kids/join");
+  revalidatePath("/notifications");
   return { success: `Join request sent for ${child.display_name}. Waiting for teacher approval.` };
 }
 
@@ -103,15 +113,8 @@ export async function admitLobbyChild(
 
   if (!lobbyId) return { error: "Missing lobby request." };
 
-  const { data: classroom } = await supabase
-    .from("classrooms")
-    .select("host_id")
-    .eq("id", classroomId)
-    .single();
-
-  if (!classroom || classroom.host_id !== user.id) {
-    return { error: "Only the teacher can admit children." };
-  }
+  const staff = await requireClassroomStaff(supabase, classroomId, user.id);
+  if (!staff.ok) return { error: staff.error };
 
   const { error } = await supabase
     .from("session_lobby")

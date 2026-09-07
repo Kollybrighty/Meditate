@@ -24,7 +24,7 @@ export default function ShareInvite({
   }, []);
 
   const message = useMemo(
-    () => `Join our ${shareLabel} "${groupName}" on Meditate: ${url}`,
+    () => `Join our ${shareLabel} "${groupName}" on Meditate\n${url}`,
     [groupName, shareLabel, url]
   );
 

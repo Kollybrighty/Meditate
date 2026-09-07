@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { syncDailyAssignments } from "@/lib/assignments";
 import { generateInviteCode, slugify } from "@/lib/utils";
 import { redirect } from "next/navigation";
 
@@ -57,6 +58,15 @@ export async function createGroup(
   });
 
   if (memberError) return { error: memberError.message };
+
+  if (startDate) {
+    await syncDailyAssignments(supabase, {
+      id: group.id,
+      reading_scope: readingScope,
+      plan_type: planType,
+      start_date: startDate,
+    });
+  }
 
   redirect(`/groups/${group.id}`);
 }

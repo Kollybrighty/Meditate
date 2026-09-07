@@ -8,6 +8,7 @@ import {
   leaveLobby,
   type LobbyActionState,
 } from "@/app/kids/lobby-actions";
+import { useRealtimeRefresh } from "@/components/kids/useRealtimeRefresh";
 
 type ChildOption = {
   id: string;
@@ -47,6 +48,12 @@ export default function ParentJoinSession({
     initialState
   );
   const [leaveState, leaveAction, leavePending] = useActionState(leaveLobby, initialState);
+
+  useRealtimeRefresh({
+    channel: `parent-lobby:${lessonId}`,
+    table: "session_lobby",
+    filter: `lesson_id=eq.${lessonId}`,
+  });
 
   const admitted = lobbyEntries.filter((e) => e.status === "admitted");
   const waiting = lobbyEntries.filter((e) => e.status === "waiting");

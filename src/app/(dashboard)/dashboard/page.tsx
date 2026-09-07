@@ -5,6 +5,11 @@ import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
 import { signOut } from "@/app/(auth)/actions";
 import { BookOpen, Users, Baby, Plus } from "lucide-react";
+import JoinInviteForm from "@/components/group/JoinInviteForm";
+import GroupManageMenu from "@/components/group/GroupManageMenu";
+import ClassroomManageMenu from "@/components/kids/ClassroomManageMenu";
+import NotificationBell from "@/components/nav/NotificationBell";
+import { listStaffClassrooms } from "@/lib/kids/staff";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -25,10 +30,7 @@ export default async function DashboardPage() {
     .select("role, groups(id, name, slug, reading_scope, plan_type)")
     .eq("user_id", user.id);
 
-  const { data: classrooms } = await supabase
-    .from("classrooms")
-    .select("id, name, slug")
-    .eq("host_id", user.id);
+  const classrooms = await listStaffClassrooms(supabase, user.id);
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -42,6 +44,7 @@ export default async function DashboardPage() {
             <span className="text-sm text-stone-600">
               {profile?.full_name || user.email}
             </span>
+            <NotificationBell />
             <form action={signOut}>
               <Button variant="ghost" size="sm" type="submit">
                 Sign out
@@ -76,15 +79,25 @@ export default async function DashboardPage() {
                   if (!group) return null;
                   return (
                     <li key={group.id}>
-                      <Link
-                        href={`/groups/${group.id}`}
-                        className="block rounded-lg border border-stone-100 p-4 hover:border-gold/30 hover:bg-gold/5"
-                      >
-                        <span className="font-medium">{group.name}</span>
-                        <span className="ml-2 text-xs text-stone-500">
-                          {group.reading_scope.replace(/_/g, " ")} · {group.plan_type}
-                        </span>
-                      </Link>
+                      <div className="flex items-stretch rounded-lg border border-stone-100 hover:border-gold/30 hover:bg-gold/5">
+                        {g.role === "owner" || g.role === "admin" ? (
+                          <div className="flex items-center pl-1">
+                            <GroupManageMenu
+                              groupId={group.id}
+                              groupName={group.name}
+                            />
+                          </div>
+                        ) : null}
+                        <Link
+                          href={`/groups/${group.id}`}
+                          className="min-w-0 flex-1 p-4"
+                        >
+                          <span className="font-medium">{group.name}</span>
+                          <span className="ml-2 text-xs text-stone-500">
+                            {group.reading_scope.replace(/_/g, " ")} · {group.plan_type}
+                          </span>
+                        </Link>
+                      </div>
                     </li>
                   );
                 })}
@@ -109,16 +122,25 @@ export default async function DashboardPage() {
                 </Button>
               </Link>
             </div>
-            {classrooms && classrooms.length > 0 ? (
+            {classrooms.length > 0 ? (
               <ul className="space-y-2">
                 {classrooms.map((c) => (
                   <li key={c.id}>
-                    <Link
-                      href={`/kids/classrooms/${c.id}`}
-                      className="block rounded-lg border border-stone-100 p-4 hover:border-sky-200 hover:bg-sky-50"
-                    >
-                      {c.name}
-                    </Link>
+                    <div className="flex items-stretch rounded-lg border border-stone-100 hover:border-sky-200 hover:bg-sky-50">
+                      <div className="flex items-center pl-1">
+                        <ClassroomManageMenu
+                          classroomId={c.id}
+                          classroomName={c.name}
+                          canManage={c.isOwner}
+                        />
+                      </div>
+                      <Link
+                        href={`/kids/classrooms/${c.id}`}
+                        className="min-w-0 flex-1 p-4"
+                      >
+                        {c.name}
+                      </Link>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -136,11 +158,13 @@ export default async function DashboardPage() {
           </section>
         </div>
 
-        <section className="mt-8 rounded-xl border border-dashed border-stone-300 bg-white p-6 text-center">
+        <section className="mt-8 rounded-xl border border-dashed border-stone-300 bg-white p-6">
           <Users className="mx-auto h-8 w-8 text-stone-400" />
-          <p className="mt-2 text-sm text-stone-600">
-            Join a group with an invite link from your group admin.
+          <p className="mt-2 text-center text-sm text-stone-600">
+            Have an invite? Join a group to unlock today&apos;s reading, members,
+            and the Q&amp;A forum.
           </p>
+          <JoinInviteForm />
         </section>
       </main>
     </div>

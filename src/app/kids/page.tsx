@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Baby } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { listStaffClassrooms } from "@/lib/kids/staff";
 
 export default async function KidsHomePage() {
   const supabase = await createClient();
@@ -10,13 +11,11 @@ export default async function KidsHomePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ count: hostedCount }, { data: children }] = await Promise.all([
-    supabase
-      .from("classrooms")
-      .select("*", { count: "exact", head: true })
-      .eq("host_id", user.id),
+  const [staffClassrooms, { data: children }] = await Promise.all([
+    listStaffClassrooms(supabase, user.id),
     supabase.from("child_profiles").select("id").eq("parent_user_id", user.id),
   ]);
+  const hostedCount = staffClassrooms.length;
 
   const childIds = (children ?? []).map((c) => c.id);
   let enrolledCount = 0;
@@ -36,7 +35,7 @@ export default async function KidsHomePage() {
       description: "Create a Kids Bible class, start live sessions, and admit children from the lobby.",
       meta:
         hostedCount && hostedCount > 0
-          ? `${hostedCount} classroom${hostedCount === 1 ? "" : "s"} you host`
+          ? `${hostedCount} classroom${hostedCount === 1 ? "" : "s"} you teach`
           : "For teachers",
     },
     {

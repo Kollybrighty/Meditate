@@ -8,6 +8,11 @@ import CharacterPicker from "@/components/kids/CharacterPicker";
 import ContributionBoard from "@/components/kids/ContributionBoard";
 import NextToQuizButton from "@/components/kids/NextToQuizButton";
 import TeacherLobbyPanel from "@/components/kids/TeacherLobbyPanel";
+import LiveSessionMedia from "@/components/kids/LiveSessionMedia";
+import RaiseHandPanel from "@/components/kids/RaiseHandPanel";
+import LessonMaterialsAttach from "@/components/kids/LessonMaterialsAttach";
+import KidsSessionGuard from "@/components/kids/KidsSessionGuard";
+import { isClassroomStaff } from "@/lib/kids/staff";
 
 type LobbyEntry = {
   id: string;
@@ -49,11 +54,18 @@ export default async function LessonSessionPage({
 
   if (!lesson) notFound();
 
-  const isHost = classroom.host_id === user.id;
+  const isStaff = await isClassroomStaff(supabase, id, user.id, classroom.host_id);
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, username")
+    .eq("id", user.id)
+    .maybeSingle();
+  const displayName = profile?.full_name || profile?.username || "You";
 
   const { data: myChildren } = await supabase
     .from("child_profiles")
-    .select("id")
+    .select("id, display_name")
     .eq("parent_user_id", user.id);
 
   const enrolledChildIds: string[] = [];
@@ -85,11 +97,19 @@ export default async function LessonSessionPage({
   const parentLobbyEntries = lobbyEntries.filter((e) =>
     enrolledChildIds.includes(e.child_profile_id)
   );
-  const hasAdmittedChild = parentLobbyEntries.some((e) => e.status === "admitted");
-  const canViewSession = isHost || hasAdmittedChild;
+  const admittedChildren = (myChildren ?? []).filter((child) =>
+    parentLobbyEntries.some(
+      (entry) => entry.child_profile_id === child.id && entry.status === "admitted"
+    )
+  );
+  const hasAdmittedChild = admittedChildren.length > 0;
+  const canViewSession = isStaff || (hasAdmittedChild && lesson.status === "active");
 
-  // Parents join / wait in /kids/join — lesson page is for admitted participants + host.
-  if (!isHost && !canViewSession) {
+  if (!isStaff && lesson.status !== "active") {
+    redirect(`/kids/join?classroom=${id}`);
+  }
+
+  if (!canViewSession) {
     redirect(`/kids/join?classroom=${id}`);
   }
 
@@ -114,11 +134,40 @@ export default async function LessonSessionPage({
     .eq("classroom_id", id)
     .order("created_at", { ascending: false });
 
+  const { data: materialLinks } = await supabase
+    .from("lesson_material_links")
+    .select("material_id")
+    .eq("lesson_id", lessonId);
+
   const { data: contributions } = await supabase
     .from("board_contributions")
-    .select("id, body, is_teacher, created_at")
+    .select(
+      "id, body, is_teacher, visibility, is_pinned, shared_by_teacher, created_at"
+    )
     .eq("lesson_id", lessonId)
     .order("created_at", { ascending: false });
+
+  const { data: handRows } = await supabase
+    .from("raised_hands")
+    .select(
+      "id, child_profile_id, status, raised_at, child_profiles(display_name)"
+    )
+    .eq("lesson_id", lessonId)
+    .in("status", ["raised", "called_on"])
+    .order("raised_at", { ascending: true });
+
+  const hands = (handRows ?? []).map((row) => {
+    const profile = Array.isArray(row.child_profiles)
+      ? row.child_profiles[0]
+      : row.child_profiles;
+    return {
+      id: row.id,
+      child_profile_id: row.child_profile_id,
+      status: row.status,
+      raised_at: row.raised_at,
+      child_name: profile?.display_name ?? "Child",
+    };
+  });
 
   const { data: openQuiz } = await supabase
     .from("lesson_quizzes")
@@ -138,10 +187,10 @@ export default async function LessonSessionPage({
     <div className="min-h-screen bg-sky-50">
       <header className="border-b border-sky-200 bg-white px-6 py-4">
         <Link
-          href={isHost ? `/kids/classrooms/${id}` : `/kids/join?classroom=${id}`}
+          href={isStaff ? `/kids/classrooms/${id}` : `/kids/join?classroom=${id}`}
           className="text-sm text-sky-700 hover:underline"
         >
-          ← {isHost ? classroom.name : "Join a class"}
+          ← {isStaff ? classroom.name : "Join a class"}
         </Link>
         <div className="mt-2 flex items-center gap-2">
           <Baby className="h-8 w-8 text-sky-500" />
@@ -156,6 +205,7 @@ export default async function LessonSessionPage({
       </header>
 
       <main className="mx-auto max-w-3xl space-y-6 px-6 py-10">
+        {!isStaff ? <KidsSessionGuard lessonId={lessonId} enabled /> : null}
         {lesson.status === "active" ? (
           <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
             Session is live.
@@ -166,7 +216,14 @@ export default async function LessonSessionPage({
           </p>
         )}
 
-        {isHost && lesson.status === "active" ? (
+        <LiveSessionMedia
+          lessonId={lessonId}
+          displayName={displayName}
+          role={isStaff ? "teacher" : "family"}
+          active={lesson.status === "active"}
+        />
+
+        {isStaff && lesson.status === "active" ? (
           <TeacherLobbyPanel
             classroomId={id}
             lessonId={lessonId}
@@ -174,7 +231,16 @@ export default async function LessonSessionPage({
           />
         ) : null}
 
-        {canViewSession && !lesson.character_id && isHost && lesson.status === "active" ? (
+        <RaiseHandPanel
+          classroomId={id}
+          lessonId={lessonId}
+          isStaff={isStaff}
+          admittedChildren={admittedChildren}
+          hands={hands}
+          lessonActive={lesson.status === "active"}
+        />
+
+        {canViewSession && !lesson.character_id && isStaff && lesson.status === "active" ? (
           <CharacterPicker
             classroomId={id}
             lessonId={lessonId}
@@ -182,7 +248,7 @@ export default async function LessonSessionPage({
           />
         ) : null}
 
-        {canViewSession && !lesson.character_id && !isHost ? (
+        {canViewSession && !lesson.character_id && !isStaff ? (
           <section className="rounded-xl border border-sky-200 bg-white p-6">
             <h2 className="font-semibold text-sky-900">Waiting for teacher</h2>
             <p className="mt-2 text-stone-600">
@@ -225,44 +291,23 @@ export default async function LessonSessionPage({
                 </div>
               </div>
 
-              <div className="mt-6">
-                <h3 className="text-sm font-semibold text-sky-900">
-                  Classroom uploads
-                </h3>
-                {materials && materials.length > 0 ? (
-                  <ul className="mt-2 space-y-2">
-                    {materials.map((m) => (
-                      <li key={m.id}>
-                        <a
-                          href={m.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block rounded-lg border border-sky-100 px-4 py-3 hover:bg-sky-50"
-                        >
-                          <span className="font-medium text-stone-800">{m.title}</span>
-                          <span className="ml-2 text-xs uppercase text-stone-500">
-                            {m.file_type}
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-sm text-stone-500">
-                    No uploaded materials yet. Teachers can add files from the classroom page.
-                  </p>
-                )}
-              </div>
+              <LessonMaterialsAttach
+                classroomId={id}
+                lessonId={lessonId}
+                materials={materials ?? []}
+                linkedIds={(materialLinks ?? []).map((row) => row.material_id)}
+                isStaff={isStaff}
+              />
             </section>
 
             <ContributionBoard
               classroomId={id}
               lessonId={lessonId}
-              isHost={isHost}
+              isStaff={isStaff}
               contributions={contributions ?? []}
             />
 
-            {isHost && lesson.status === "active" ? (
+            {isStaff && lesson.status === "active" ? (
               <section className="rounded-xl border border-sky-200 bg-white p-6">
                 <h2 className="font-semibold text-sky-900">Ready for quiz?</h2>
                 <p className="mt-1 text-sm text-stone-600">
@@ -287,12 +332,12 @@ export default async function LessonSessionPage({
         ) : null}
 
         <div className="flex flex-wrap gap-3">
-          <Link href={isHost ? `/kids/classrooms/${id}` : `/kids/join?classroom=${id}`}>
+          <Link href={isStaff ? `/kids/classrooms/${id}` : `/kids/join?classroom=${id}`}>
             <Button variant="outline">
-              {isHost ? "Back to classroom" : "Back to Join a class"}
+              {isStaff ? "Back to classroom" : "Back to Join a class"}
             </Button>
           </Link>
-          {isHost && lesson.status === "active" ? (
+          {isStaff && lesson.status === "active" ? (
             <EndLessonButton classroomId={id} lessonId={lessonId} />
           ) : null}
         </div>

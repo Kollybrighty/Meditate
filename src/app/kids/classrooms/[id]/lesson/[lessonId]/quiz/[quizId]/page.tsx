@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { Baby } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import QuizSubmitForm from "@/components/kids/QuizSubmitForm";
+import QuizClassResults from "@/components/kids/QuizClassResults";
+import QuizTeacherTools from "@/components/kids/QuizTeacherTools";
+import QuizQuestionCard from "@/components/kids/QuizQuestionCard";
+import KidsSessionGuard from "@/components/kids/KidsSessionGuard";
+import { isClassroomStaff } from "@/lib/kids/staff";
 
 export default async function LessonQuizPage({
   params,
@@ -37,7 +43,93 @@ export default async function LessonQuizPage({
     .eq("quiz_id", quizId)
     .order("id", { ascending: true });
 
-  const isHost = classroom.host_id === user.id;
+  const isStaff = await isClassroomStaff(
+    supabase,
+    id,
+    user.id,
+    classroom.host_id
+  );
+  const quizClosed = Boolean(quiz.closed_at);
+  const questionList = questions ?? [];
+  const questionIds = questionList.map((q) => q.id);
+
+  const { data: myChildren } = await supabase
+    .from("child_profiles")
+    .select("id, display_name")
+    .eq("parent_user_id", user.id);
+
+  const myChildIds = (myChildren ?? []).map((child) => child.id);
+  let admittedChildren: { id: string; display_name: string }[] = [];
+
+  if (myChildIds.length > 0) {
+    const { data: lobby } = await supabase
+      .from("session_lobby")
+      .select("child_profile_id")
+      .eq("lesson_id", lessonId)
+      .eq("status", "admitted")
+      .in("child_profile_id", myChildIds);
+    const admittedIds = new Set((lobby ?? []).map((row) => row.child_profile_id));
+    admittedChildren = (myChildren ?? []).filter((child) =>
+      admittedIds.has(child.id)
+    );
+  }
+
+  const { data: lesson } = await supabase
+    .from("kids_lessons")
+    .select("status")
+    .eq("id", lessonId)
+    .eq("classroom_id", id)
+    .maybeSingle();
+
+  if (!isStaff && lesson?.status !== "active") {
+    redirect(`/kids/join?classroom=${id}`);
+  }
+
+  if (!isStaff && admittedChildren.length === 0) {
+    redirect(`/kids/classrooms/${id}/lesson/${lessonId}`);
+  }
+
+  const { data: responseRows } =
+    questionIds.length > 0
+      ? await supabase
+          .from("quiz_responses")
+          .select(
+            "id, question_id, child_profile_id, answer, is_correct, teacher_grade, child_profiles(display_name)"
+          )
+          .in("question_id", questionIds)
+      : { data: [] };
+
+  const classResponses = (responseRows ?? []).map((row) => {
+    const profile = Array.isArray(row.child_profiles)
+      ? row.child_profiles[0]
+      : row.child_profiles;
+    return {
+      id: row.id,
+      question_id: row.question_id,
+      child_profile_id: row.child_profile_id,
+      answer: row.answer,
+      is_correct: row.is_correct,
+      teacher_grade: row.teacher_grade,
+      child_name: profile?.display_name ?? "Child",
+    };
+  });
+
+  const existingByChild: Record<
+    string,
+    Record<string, { answer: string; is_correct: boolean | null }>
+  > = {};
+  for (const row of classResponses) {
+    if (!admittedChildren.some((child) => child.id === row.child_profile_id)) {
+      continue;
+    }
+    if (!existingByChild[row.child_profile_id]) {
+      existingByChild[row.child_profile_id] = {};
+    }
+    existingByChild[row.child_profile_id][row.question_id] = {
+      answer: row.answer,
+      is_correct: row.is_correct,
+    };
+  }
 
   return (
     <div className="min-h-screen bg-sky-50">
@@ -53,61 +145,60 @@ export default async function LessonQuizPage({
           <h1 className="text-2xl font-bold text-sky-900">{quiz.title}</h1>
         </div>
         <p className="text-sky-700">
-          {isHost ? "Teacher view · review answers with the class" : "Quiz time"}
+          {isStaff
+            ? "Teacher view · review answers with the class"
+            : "Quiz time · pick an answer for each question"}
         </p>
       </header>
 
       <main className="mx-auto max-w-3xl space-y-4 px-6 py-10">
-        {(questions ?? []).map((q, index) => {
-          const options = Array.isArray(q.options) ? (q.options as string[]) : [];
-          return (
-            <section
-              key={q.id}
-              className="rounded-xl border border-sky-200 bg-white p-6"
-            >
-              <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-                Question {index + 1} · {q.question_type.replace(/_/g, " ")}
-              </p>
-              <h2 className="mt-2 font-semibold text-stone-900">{q.question_text}</h2>
-              {options.length > 0 ? (
-                <ul className="mt-3 space-y-2">
-                  {options.map((opt) => (
-                    <li
-                      key={opt}
-                      className={`rounded-lg border px-3 py-2 text-sm ${
-                        isHost && q.correct_answer === opt
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                          : "border-stone-200 bg-stone-50 text-stone-700"
-                      }`}
-                    >
-                      {opt}
-                      {isHost && q.correct_answer === opt ? " ✓" : ""}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {q.question_type === "true_false" && isHost ? (
-                <p className="mt-3 text-sm text-emerald-800">
-                  Answer: {q.correct_answer ?? "—"}
-                </p>
-              ) : null}
-              {q.question_type === "short_answer" ? (
-                <p className="mt-3 text-sm text-stone-600">
-                  {isHost
-                    ? "Discuss answers together and grade as a class."
-                    : "Share your answer with your teacher."}
-                </p>
-              ) : null}
-            </section>
-          );
-        })}
+        {!isStaff ? <KidsSessionGuard lessonId={lessonId} enabled /> : null}
+        {isStaff ? (
+          <>
+            <QuizTeacherTools
+              classroomId={id}
+              lessonId={lessonId}
+              quizId={quizId}
+              quizClosed={quizClosed}
+            />
+            {questionList.map((q, index) => (
+              <QuizQuestionCard
+                key={q.id}
+                classroomId={id}
+                lessonId={lessonId}
+                quizId={quizId}
+                index={index}
+                question={q}
+              />
+            ))}
+            <QuizClassResults
+              classroomId={id}
+              lessonId={lessonId}
+              quizId={quizId}
+              questions={questionList}
+              responses={classResponses}
+            />
+          </>
+        ) : (
+          <QuizSubmitForm
+            classroomId={id}
+            lessonId={lessonId}
+            quizId={quizId}
+            questions={questionList}
+            childrenOptions={admittedChildren}
+            existingByChild={existingByChild}
+            quizClosed={quizClosed}
+          />
+        )}
 
         <div className="flex flex-wrap gap-3 pt-2">
           <Link href={`/kids/classrooms/${id}/lesson/${lessonId}`}>
             <Button variant="outline">Back to lesson</Button>
           </Link>
-          <Link href={`/kids/classrooms/${id}`}>
-            <Button variant="secondary">Classroom</Button>
+          <Link href={isStaff ? `/kids/classrooms/${id}` : `/kids/join?classroom=${id}`}>
+            <Button variant="secondary">
+              {isStaff ? "Classroom" : "Join a class"}
+            </Button>
           </Link>
         </div>
       </main>
