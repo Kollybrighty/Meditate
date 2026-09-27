@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Highlighter, MessageCircle, Play, Share2, Square } from "lucide-react";
+import { Copy, Highlighter, MessageCircle, Pause, Play, Share2, Square } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   toggleReadingComplete,
@@ -12,7 +12,6 @@ import type { ReadingChapter } from "@/lib/bible/plan";
 import { formatPassage } from "@/lib/bible/plan";
 import {
   fetchPassage,
-  passagePlainText,
   type PassagePayload,
 } from "@/lib/bible/passage";
 import {
@@ -20,7 +19,20 @@ import {
   flushProgressQueue,
   getProgressQueue,
 } from "@/lib/offline/progress-queue";
-import { isSpeechSupported, speakEnglish, stopSpeech } from "@/lib/bible/speech";
+import {
+  buildReadingItems,
+  chapterElementId,
+  matchesChapter,
+  verseElementId,
+} from "@/lib/bible/reading-follow";
+import {
+  isReadingSupported,
+  pauseReading,
+  resumeReading,
+  startReading,
+  stopReading,
+  useReadingPlayer,
+} from "@/lib/bible/reading-player";
 import { useBibleVersion } from "@/components/group/BibleVersionSelect";
 import { bibleGatewayUrl, hasInAppText } from "@/lib/bible/versions";
 import { cn } from "@/lib/utils";
@@ -128,9 +140,41 @@ export function ChapterReader({
   groupId: string;
 }) {
   const { version } = useBibleVersion();
+  const player = useReadingPlayer();
   const [open, setOpen] = useState<string>(
     chapters[0] ? `${chapters[0].book}-${chapters[0].chapter}` : ""
   );
+
+  useEffect(() => {
+    const current = player.current;
+    if (!current) return;
+    setOpen(`${current.book}-${current.chapter}`);
+    const id =
+      current.verse < 1
+        ? chapterElementId(current.book, current.chapter)
+        : verseElementId(current.book, current.chapter, current.verse);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let cancelled = false;
+    let tries = 0;
+    const scroll = () => {
+      if (cancelled) return;
+      const el = document.getElementById(id);
+      if (!el && tries < 20) {
+        tries += 1;
+        window.setTimeout(scroll, 50);
+        return;
+      }
+      el?.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "center",
+      });
+    };
+    const frame = window.requestAnimationFrame(scroll);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [player.current]);
 
   return (
     <div className="space-y-3">
@@ -140,6 +184,7 @@ export function ChapterReader({
         return (
           <section
             key={key}
+            id={chapterElementId(chapter.book, chapter.chapter)}
             className="overflow-hidden rounded-xl border border-stone-200 bg-white"
           >
             <button
@@ -170,9 +215,9 @@ function ChapterBody({
 }) {
   const router = useRouter();
   const { version } = useBibleVersion();
+  const player = useReadingPlayer();
   const [data, setData] = useState<PassagePayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [listening, setListening] = useState(false);
   const [marks, setMarks] = useState<Record<number, VerseMarkType>>({});
   const [selected, setSelected] = useState<number | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
@@ -181,8 +226,6 @@ function ChapterBody({
 
   useEffect(() => {
     let cancelled = false;
-    stopSpeech();
-    setListening(false);
 
     if (!inApp) {
       setData(null);
@@ -219,20 +262,27 @@ function ChapterBody({
       });
     return () => {
       cancelled = true;
-      stopSpeech();
-      setListening(false);
     };
   }, [chapter.book, chapter.chapter, version.id, inApp]);
 
-  async function listenChapter() {
-    if (!data || listening) return;
-    if (!isSpeechSupported()) return;
-    const text = passagePlainText(data);
-    if (!text) return;
-    setListening(true);
-    await speakEnglish(`${formatPassage(chapter)}. ${text}`);
-    setListening(false);
+  function listenChapter() {
+    if (!data || !isReadingSupported()) return;
+    startReading({
+      items: buildReadingItems([
+        {
+          book: chapter.book,
+          chapter: chapter.chapter,
+          verses: data.verses,
+        },
+      ]),
+      groupId,
+      returnHref: `${window.location.pathname}${window.location.search}`,
+      versionId: version.id,
+    });
   }
+
+  const listeningHere = matchesChapter(player.current, chapter.book, chapter.chapter);
+  const currentVerse = listeningHere ? player.current?.verse ?? 0 : 0;
 
   async function toggleMark(verse: number) {
     const current = marks[verse] ?? null;
@@ -335,6 +385,27 @@ function ChapterBody({
     return <p className="px-5 pb-5 text-sm text-stone-500">Loading passage…</p>;
   }
 
+  if (data?.gatewayOnly) {
+    return (
+      <div className="space-y-2 px-5 pb-5">
+        <p className="text-sm font-medium text-stone-800">
+          {version.abbreviation} · {version.name}
+        </p>
+        <p className="text-sm text-stone-600">
+          This edition opens on Bible Gateway.
+        </p>
+        <a
+          href={gateway}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block font-medium text-gold hover:underline"
+        >
+          Read {formatPassage(chapter)} in the {version.abbreviation}
+        </a>
+      </div>
+    );
+  }
+
   if (!data?.verses?.length) {
     return (
       <p className="px-5 pb-5 text-sm text-stone-600">
@@ -348,23 +419,35 @@ function ChapterBody({
 
   return (
     <div className="space-y-3 px-5 pb-5">
-      {isSpeechSupported() ? (
-        <div>
-          {listening ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                stopSpeech();
-                setListening(false);
-              }}
-            >
-              <Square className="mr-1 h-4 w-4" />
-              Stop
-            </Button>
+      {isReadingSupported() ? (
+        <div className="flex flex-wrap gap-2">
+          {listeningHere && player.status !== "idle" ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={player.status === "paused" ? resumeReading : pauseReading}
+              >
+                {player.status === "paused" ? (
+                  <>
+                    <Play className="mr-1 h-4 w-4" />
+                    Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause className="mr-1 h-4 w-4" />
+                    Pause
+                  </>
+                )}
+              </Button>
+              <Button type="button" size="sm" variant="secondary" onClick={stopReading}>
+                <Square className="mr-1 h-4 w-4" />
+                Stop
+              </Button>
+            </>
           ) : (
-            <Button type="button" size="sm" variant="outline" onClick={() => void listenChapter()}>
+            <Button type="button" size="sm" variant="outline" onClick={listenChapter}>
               <Play className="mr-1 h-4 w-4" />
               Listen
             </Button>
@@ -382,6 +465,7 @@ function ChapterBody({
           <div key={verse.verse}>
             <button
               type="button"
+              id={verseElementId(chapter.book, chapter.chapter, verse.verse)}
               onClick={() => {
                 setSelected(verse.verse);
                 setShareStatus(null);
@@ -391,6 +475,7 @@ function ChapterBody({
                 mark === "highlight" && "bg-amber-100",
                 mark === "underline" &&
                   "underline decoration-gold decoration-2 underline-offset-4",
+                currentVerse === verse.verse && "bg-gold/15 ring-2 ring-gold/40",
                 isSelected && "ring-2 ring-gold/50"
               )}
             >
@@ -451,7 +536,8 @@ function ChapterBody({
         </p>
       ) : null}
       <p className="text-xs text-stone-500">
-        {data.translation || `${version.name} (${version.abbreviation})`}.{" "}
+        {data.translation || `${version.name} (${version.abbreviation})`}.
+        {data.copyright ? ` ${data.copyright}` : ""}{" "}
         <a href={gateway} target="_blank" rel="noopener noreferrer" className="hover:underline">
           Open on Bible Gateway
         </a>

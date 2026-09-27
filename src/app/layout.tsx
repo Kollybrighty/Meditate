@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
+import ReadingPlayerDock from "@/components/group/ReadingPlayerDock";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-stone-50 text-stone-900 antialiased">
         <ServiceWorkerRegister />
         {children}
+        <ReadingPlayerDock />
       </body>
     </html>
   );

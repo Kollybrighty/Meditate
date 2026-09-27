@@ -63,6 +63,25 @@ export default function RegisterForm({ nextPath }: { nextPath: string | null }) 
             </label>
             <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" />
           </div>
+          <label className="flex items-start gap-2 text-sm text-stone-600">
+            <input
+              type="checkbox"
+              name="agree"
+              required
+              className="mt-1 accent-[#B8860B]"
+            />
+            <span>
+              I agree to the{" "}
+              <Link href="/terms" className="font-medium text-gold hover:underline">
+                Terms
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="font-medium text-gold hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? "Creating account…" : "Create account"}
           </Button>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import type { ReadingChapter } from "@/lib/bible/plan";
 import { passageRequestUrl } from "@/lib/bible/passage";
 import { useBibleVersion } from "@/components/group/BibleVersionSelect";
-import { hasInAppText } from "@/lib/bible/versions";
+import { formatInAppVersionList, hasInAppText } from "@/lib/bible/versions";
 
 const CACHE = "meditate-reading-v1";
 
@@ -87,7 +87,7 @@ export default function OfflineReadingBar({
       </Button>
       {!inApp ? (
         <p className="text-xs text-stone-500">
-          Save for offline is available for WEB and KJV.
+          Save for offline is available for {formatInAppVersionList()}.
         </p>
       ) : !online ? (
         <p className="text-xs text-amber-800">

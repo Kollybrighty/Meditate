@@ -11,6 +11,7 @@ import {
 import {
   BIBLE_VERSIONS,
   DEFAULT_BIBLE_VERSION_ID,
+  formatInAppVersionList,
   getBibleVersion,
   hasInAppText,
   isBibleVersionId,
@@ -91,8 +92,8 @@ export function BibleVersionSelect() {
       </p>
       {!inApp ? (
         <p className="mt-1 text-xs text-stone-500">
-          This licensed edition opens on Bible Gateway. WEB and KJV can be read
-          and heard in the app, including offline.
+          This licensed edition opens on Bible Gateway. {formatInAppVersionList()}{" "}
+          can be read and heard in the app, including offline.
         </p>
       ) : null}
     </div>

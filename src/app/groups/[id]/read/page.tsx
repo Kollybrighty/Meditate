@@ -194,7 +194,7 @@ export default async function TodayReadingPage({
               {completed ? (
                 <p className="mt-2 text-sm text-emerald-700">Marked complete.</p>
               ) : null}
-              <ReadingListenBar chapters={reading.chapters} />
+              <ReadingListenBar chapters={reading.chapters} groupId={id} />
               <OfflineReadingBar chapters={upcomingChapters} pageUrls={pageUrls} />
             </section>
             <div className="mt-6">

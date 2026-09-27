@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
 import { BookOpen, Users, Headphones, Baby } from "lucide-react";
@@ -73,9 +74,7 @@ export default function HomePage() {
         </section>
       </main>
 
-      <footer className="border-t border-stone-200 py-8 text-center text-sm text-stone-500">
-        © {new Date().getFullYear()} Meditate — Bible study for every generation.
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { requireSupabaseEnv } from "@/lib/supabase/config";
 import { safeNextPath } from "@/lib/safe-path";
 
 export async function updateSession(request: NextRequest) {
@@ -11,10 +12,10 @@ export async function updateSession(request: NextRequest) {
     request: { headers: requestHeaders },
   });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  let user = null;
+  try {
+    const { url, anonKey } = requireSupabaseEnv();
+    const supabase = createServerClient(url, anonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -31,12 +32,15 @@ export async function updateSession(request: NextRequest) {
           );
         },
       },
-    }
-  );
+    });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const {
+      data: { user: sessionUser },
+    } = await supabase.auth.getUser();
+    user = sessionUser;
+  } catch {
+    user = null;
+  }
 
   const isAuthPage =
     request.nextUrl.pathname.startsWith("/login") ||

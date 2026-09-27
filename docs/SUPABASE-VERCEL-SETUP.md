@@ -77,6 +77,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbG...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
 BIBLE_API_KEY=
 RESEND_API_KEY=
+RESEND_FROM_EMAIL=Meditate <onboarding@resend.dev>
+NEXT_PUBLIC_CONTACT_EMAIL=
 ```
 
 3. Start the dev server:
@@ -120,8 +122,10 @@ git push -u origin main
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Your Supabase service role key |
-| `BIBLE_API_KEY` | (optional for now) |
-| `RESEND_API_KEY` | (optional for now) |
+| `BIBLE_API_KEY` | API.Bible Starter key for in-app NLT ([scripture.api.bible](https://scripture.api.bible)). Leave empty and NLT opens on Bible Gateway. WEB and KJV stay in the app either way. |
+| `RESEND_API_KEY` | From [resend.com](https://resend.com). When set, password reset and group/Kids notices send through Resend. When empty, password reset still uses Supabase Auth email. |
+| `RESEND_FROM_EMAIL` | `Meditate <onboarding@resend.dev>` until your domain is verified, then `Meditate <hello@your-domain.com>`. |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | Address shown on the privacy policy and terms. Also receives error alerts when Resend is set. |
 
 7. Click **Deploy**
 
@@ -141,7 +145,8 @@ git push -u origin main
 | Test | Expected |
 |---|---|
 | Visit Vercel URL | Landing page loads with Meditate logo |
-| Register | Creates account, redirects to dashboard |
+| Visit `/privacy` and `/terms` | Both pages load, with your contact email if you set one |
+| Register | Checkbox for Terms and Privacy is required, then the account is created |
 | Create group | Group appears on dashboard with invite link + QR |
 | Sign out / sign in | Session persists correctly |
 
@@ -153,6 +158,13 @@ git push -u origin main
 - Double-check `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel env vars
 - Redeploy after changing env vars
 
+### "Can't reach the sign-in service" or "fetch failed"
+The app cannot contact your Supabase project. Login and password reset both fail until this is fixed.
+1. Open [Supabase Dashboard](https://supabase.com/dashboard) and confirm the project still exists (not paused or deleted).
+2. Copy **Project Settings → API → Project URL**. It should look like `https://xxxx.supabase.co`, not `http://127.0.0.1:54321`.
+3. Set that URL plus the **anon** key in `.env.local` and in **Vercel → Settings → Environment Variables**.
+4. Redeploy on Vercel. Restart `npm run dev` locally.
+
 ### Register works locally but not on Vercel
 - Add your Vercel URL to Supabase **Redirect URLs** (Authentication → URL Configuration)
 
@@ -161,6 +173,32 @@ git push -u origin main
 
 ### Email confirmation blocking signup
 - Supabase Dashboard → Authentication → Providers → Email → disable **Confirm email** for development
+
+### Password reset email never arrives
+- Without `RESEND_API_KEY`, Supabase sends the email. Check Authentication → Emails, and spam.
+- With `RESEND_API_KEY`, the app sends the link itself. On the Resend free plan, `onboarding@resend.dev` can only deliver to the email on your Resend account until you verify a domain.
+- The redirect URL (`https://your-domain.com/auth/callback`) must be listed in Supabase → Authentication → URL Configuration.
+
+### NLT text does not appear inside the reader
+- WEB and KJV do not need a key.
+- For in-app NLT, set `BIBLE_API_KEY` and add NLT to that API.Bible app. Until then, choosing NLT opens Bible Gateway.
+
+---
+
+## Part 5 — Custom domain
+
+Buy the domain at Cloudflare Registrar, Porkbun, or Namecheap. Then attach it to the Vercel project. Meditate already uses the address the visitor typed for invite links and password reset, so you do not change application code.
+
+1. Vercel → your project → **Settings** → **Domains** → **Add** → enter `your-domain.com` and `www.your-domain.com`.
+2. At the registrar, add the DNS records Vercel shows. That is usually:
+   - `A` record for `@` → `76.76.21.21`
+   - `CNAME` record for `www` → `cname.vercel-dns.com`
+3. Wait until Vercel shows the domain as valid. HTTPS is issued for you.
+4. Set `NEXT_PUBLIC_APP_URL` to `https://your-domain.com` and redeploy.
+5. Supabase → **Authentication** → **URL Configuration**:
+   - **Site URL:** `https://your-domain.com`
+   - **Redirect URLs:** `https://your-domain.com/**`
+6. After the domain is verified in Resend, set `RESEND_FROM_EMAIL` to an address on that domain, such as `Meditate <hello@your-domain.com>`.
 
 ---
 

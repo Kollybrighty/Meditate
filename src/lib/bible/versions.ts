@@ -4,12 +4,18 @@ export type BibleVersion = {
   name: string;
   /** bible-api.com identifier when the full text can be shown in the app. */
   bibleApiId?: string;
+  /** scripture.api.bible identifier for licensed in-app editions such as NLT. */
+  apiBibleId?: string;
   gatewayId: string;
+  copyright?: string;
 };
 
 export const DEFAULT_BIBLE_VERSION_ID = "web";
 
-/** Versions available on daily reading. Public-domain text loads in-app. */
+/** Default API.Bible edition id for NLT. Override with API_BIBLE_NLT_ID. */
+export const DEFAULT_NLT_BIBLE_ID = "065c64f65a13ca21-01";
+
+/** Versions available on daily reading. WEB/KJV use bible-api.com; NLT uses API.Bible. */
 export const BIBLE_VERSIONS: BibleVersion[] = [
   {
     id: "web",
@@ -47,7 +53,10 @@ export const BIBLE_VERSIONS: BibleVersion[] = [
     id: "nlt",
     abbreviation: "NLT",
     name: "New Living Translation",
+    apiBibleId: DEFAULT_NLT_BIBLE_ID,
     gatewayId: "NLT",
+    copyright:
+      "Holy Bible, New Living Translation, copyright © 1996, 2004, 2015 by Tyndale House Foundation. Used by permission of Tyndale House Publishers, Carol Stream, Illinois 60188. All rights reserved.",
   },
 ];
 
@@ -62,7 +71,16 @@ export function isBibleVersionId(id: string | null | undefined): id is string {
 }
 
 export function hasInAppText(version: BibleVersion): boolean {
-  return Boolean(version.bibleApiId);
+  return Boolean(version.bibleApiId || version.apiBibleId);
+}
+
+export function formatInAppVersionList(): string {
+  const names = BIBLE_VERSIONS.filter(hasInAppText).map(
+    (version) => version.abbreviation
+  );
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
 
 export function bibleGatewayUrl(bookChapter: string, version: BibleVersion): string {

@@ -8,6 +8,7 @@ export type PassagePayload = {
   text?: string;
   verses: { verse: number; text: string }[];
   translation: string;
+  copyright?: string;
   error?: string;
   gatewayOnly?: boolean;
 };

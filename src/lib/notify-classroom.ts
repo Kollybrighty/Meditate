@@ -1,5 +1,24 @@
-import { createClient } from "@/lib/supabase/server";
+import { emailNotice } from "@/lib/email/deliver";
+import { isResendConfigured } from "@/lib/email/resend";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+
+async function classroomStaffIds(classroomId: string): Promise<string[]> {
+  const admin = createAdminClient();
+  if (!admin) return [];
+  const [{ data: classroom }, { data: members }] = await Promise.all([
+    admin.from("classrooms").select("host_id").eq("id", classroomId).maybeSingle(),
+    admin
+      .from("classroom_members")
+      .select("user_id")
+      .eq("classroom_id", classroomId)
+      .in("role", ["host", "teacher"]),
+  ]);
+  const userIds = new Set<string>();
+  if (classroom?.host_id) userIds.add(classroom.host_id);
+  for (const row of members ?? []) userIds.add(row.user_id);
+  return [...userIds];
+}
 
 export async function notifyClassroomStaff(options: {
   classroomId: string;
@@ -13,33 +32,36 @@ export async function notifyClassroomStaff(options: {
     p_type: options.type,
     p_reference_id: options.referenceId,
   });
-  if (!error) return;
 
-  const admin = createAdminClient();
-  if (!admin) return;
+  let recipientIds: string[] = [];
+  if (error) {
+    recipientIds = (await classroomStaffIds(options.classroomId)).filter(
+      (id) => id !== options.actorId
+    );
+    if (recipientIds.length === 0) return;
+    const admin = createAdminClient();
+    if (!admin) return;
+    const rows = recipientIds.map((user_id) => ({
+      user_id,
+      classroom_id: options.classroomId,
+      type: options.type,
+      reference_id: options.referenceId,
+    }));
+    const { error: insertError } = await admin.from("notifications").insert(rows);
+    if (insertError) return;
+  }
 
-  const [{ data: classroom }, { data: members }] = await Promise.all([
-    admin.from("classrooms").select("host_id").eq("id", options.classroomId).maybeSingle(),
-    admin
-      .from("classroom_members")
-      .select("user_id")
-      .eq("classroom_id", options.classroomId)
-      .in("role", ["host", "teacher"]),
-  ]);
-
-  const userIds = new Set<string>();
-  if (classroom?.host_id) userIds.add(classroom.host_id);
-  for (const row of members ?? []) userIds.add(row.user_id);
-  userIds.delete(options.actorId);
-
-  const rows = [...userIds].map((user_id) => ({
-    user_id,
-    classroom_id: options.classroomId,
+  if (!isResendConfigured()) return;
+  if (recipientIds.length === 0) {
+    recipientIds = await classroomStaffIds(options.classroomId);
+  }
+  await emailNotice({
+    userIds: recipientIds,
+    actorId: options.actorId,
     type: options.type,
-    reference_id: options.referenceId,
-  }));
-  if (rows.length === 0) return;
-  await admin.from("notifications").insert(rows);
+    classroomId: options.classroomId,
+    referenceId: options.referenceId,
+  });
 }
 
 export async function notifyClassroomUser(options: {
@@ -57,14 +79,24 @@ export async function notifyClassroomUser(options: {
     p_type: options.type,
     p_reference_id: options.referenceId,
   });
-  if (!error) return;
 
-  const admin = createAdminClient();
-  if (!admin) return;
-  await admin.from("notifications").insert({
-    user_id: options.userId,
-    classroom_id: options.classroomId,
+  if (error) {
+    const admin = createAdminClient();
+    if (!admin) return;
+    const { error: insertError } = await admin.from("notifications").insert({
+      user_id: options.userId,
+      classroom_id: options.classroomId,
+      type: options.type,
+      reference_id: options.referenceId,
+    });
+    if (insertError) return;
+  }
+
+  await emailNotice({
+    userIds: [options.userId],
+    actorId: options.actorId,
     type: options.type,
-    reference_id: options.referenceId,
+    classroomId: options.classroomId,
+    referenceId: options.referenceId,
   });
 }

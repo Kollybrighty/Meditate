@@ -11,6 +11,26 @@ export function stopSpeech() {
   }
 }
 
+export function pauseSpeech() {
+  if (typeof window !== "undefined") {
+    window.speechSynthesis?.pause();
+  }
+}
+
+export function resumeSpeech() {
+  if (typeof window !== "undefined") {
+    window.speechSynthesis?.resume();
+  }
+}
+
+export function isSpeechActive(): boolean {
+  return Boolean(window.speechSynthesis?.speaking);
+}
+
+export function isEnginePaused(): boolean {
+  return Boolean(window.speechSynthesis?.paused);
+}
+
 function pickEnglishVoice(): SpeechSynthesisVoice | undefined {
   const voices = window.speechSynthesis.getVoices();
   return (
@@ -19,7 +39,7 @@ function pickEnglishVoice(): SpeechSynthesisVoice | undefined {
   );
 }
 
-function waitForVoices(): Promise<void> {
+export function waitForVoices(): Promise<void> {
   if (window.speechSynthesis.getVoices().length > 0) {
     return Promise.resolve();
   }
