@@ -49,6 +49,8 @@ export default function GlobalError({
             >
               Try again
             </button>
+            {/* This file replaces the root layout, so the Next.js link component is not available. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a href="/" style={{ color: "#b8860b", alignSelf: "center" }}>
               Home
             </a>
